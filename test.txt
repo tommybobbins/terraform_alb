@@ -1,0 +1,53 @@
+
+variable "subnet_id" {}
+
+variable "app_name" {}
+
+variable "key_pair" {}
+
+variable "security_group_id" {}
+
+variable "target_group_arn" {}
+
+variable "instance_count" {
+   default = 1
+}
+
+data "aws_ami" "ubuntu" {
+ # ...
+}
+
+resource "aws_instance" "node" {
+ 
+  count = var.instance_count
+  
+  ami                    = data.aws_ami.ubuntu.id
+  subnet_id              = var.subnet_id
+  key_name               = var.key_pair
+  instance_type          = var.instance_type
+  vpc_security_group_ids = [var.security_group_id]
+  
+  tags          = {
+    Name        = "${var.app_name}"
+    #Environment = "production"
+  }
+  
+  root_block_device {
+        volume_type     = "gp2"
+        volume_size     = 8
+        delete_on_termination   = true
+  }
+
+  user_data = file("install_apache.sh")
+}
+
+resource "aws_lb_target_group_attachment" "node" {
+
+  count = var.instance_count
+
+  target_group_arn = var.target_group_arn
+  target_id        = aws_instance.node[count.index].id
+  port             = 80
+}
+
+# some outputs skipped 
