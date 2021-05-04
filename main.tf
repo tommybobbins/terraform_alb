@@ -23,7 +23,7 @@ module "vpc" {
   private_subnets = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
   public_subnets  = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
   # Need nat gateway if ec2 instances are in private subnet
-  enable_nat_gateway = false
+  enable_nat_gateway = true
   enable_vpn_gateway = false
 
   tags = {
@@ -121,8 +121,8 @@ module "ec2_instances" {
   instance_count     = var.instance_count
   instance_type      = "t2.micro"
   # Need NAT gateway enabling if private
-  #subnet_ids         = module.vpc.private_subnets[*]
-  subnet_ids         = module.vpc.public_subnets[*]
+  subnet_ids         = module.vpc.private_subnets[*]
+  #subnet_ids         = module.vpc.public_subnets[*]
   security_group_ids = [module.app_security_group.this_security_group_id]
 
   tags = {
