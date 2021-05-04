@@ -16,3 +16,15 @@ variable "vpc_cidr_block" {
   type        = string
   default     = "10.0.0.0/16"
 }
+
+variable "ingress_rules" {
+  description = "List of ingress rules to create by name"
+  type        = list(string)
+  default     = []
+}
+
+variable "egress_rules" {
+  description = "List of egress rules to create by name"
+  type        = list(string)
+  default     = []
+}

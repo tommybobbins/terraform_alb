@@ -40,7 +40,13 @@ module "app_security_group" {
   description = "Security group for web-servers with HTTP ports open within VPC"
   vpc_id      = module.vpc.vpc_id
 
-  ingress_cidr_blocks = module.vpc.public_subnets_cidr_blocks
+  #ingress_cidr_blocks = module.vpc.public_subnets_cidr_blocks
+  ingress_cidr_blocks = ["0.0.0.0/0"]
+  # Add 80/22 rules
+  ingress_rules = ["http-80-tcp","ssh-tcp"]
+  # Allow all rules for all protocols
+  egress_cidr_blocks = ["0.0.0.0/0"]
+  egress_rules = ["all-all"]
 
   tags = {
     project     = "bobbins",
@@ -57,6 +63,10 @@ module "lb_security_group" {
   vpc_id      = module.vpc.vpc_id
 
   ingress_cidr_blocks = ["0.0.0.0/0"]
+  # Add 80 rules
+  ingress_rules = ["http-80-tcp"]
+  # Allow all rules for all protocols
+  egress_rules = ["all-all"]
 
   tags = {
     project     = "bobbins",
