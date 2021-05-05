@@ -1,4 +1,4 @@
-#output "public_dns_name" {
-#  description = "Public DNS names of the load balancer for this project"
-#  value       = module.elb_http.this_elb_dns_name
-#}
+output "alb_dns_name" {
+  value       = aws_lb.example.dns_name
+  description = "The domain name of the load balancer"
+}

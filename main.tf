@@ -1,234 +1,104 @@
-terraform {
-  required_providers {
-    aws = {
-      source = "hashicorp/aws"
-    }
-  }
-}
+#terraform {
+#  required_version = ">= 0.12, < 0.13"
+#}
 
 provider "aws" {
-  region = var.aws_region
+  region = "us-east-1"
+#  # Allow any 2.x version of the AWS provider
+#  version = "~> 2.0"
 }
 
-data "aws_availability_zones" "available" {
-  state = "available"
-}
-
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "2.64.0"
-
-  cidr            = var.vpc_cidr_block
-  azs             = data.aws_availability_zones.available.names
-  private_subnets = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
-  public_subnets  = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-  # Need nat gateway if ec2 instances are in private subnet
-  enable_nat_gateway = true
-  enable_vpn_gateway = false
-
-  tags = {
-    project     = "bobbins",
-    environment = "dev"
-  }
-}
-
-module "app_security_group" {
-  source  = "terraform-aws-modules/security-group/aws//modules/web"
-  version = "3.17.0"
-
-  name        = "web-sg-bobbins-dev"
-  description = "Security group for web-servers with HTTP ports open within VPC"
-  vpc_id      = module.vpc.vpc_id
-
-  #ingress_cidr_blocks = module.vpc.public_subnets_cidr_blocks
-  ingress_cidr_blocks = ["0.0.0.0/0"]
-  # Add 80/22 rules
-  ingress_rules = ["http-80-tcp", "ssh-tcp"]
-  # Allow all rules for all protocols
-  egress_cidr_blocks = ["0.0.0.0/0"]
-  egress_rules       = ["all-all"]
-
-  tags = {
-    project     = "bobbins",
-    environment = "dev"
-  }
-}
-
-module "lb_security_group" {
-  source  = "terraform-aws-modules/security-group/aws//modules/web"
-  version = "3.17.0"
-
-  name        = "lb-sg-bobbins-dev"
-  description = "Security group for load balancer with HTTP ports open within VPC"
-  vpc_id      = module.vpc.vpc_id
-
-  ingress_cidr_blocks = ["0.0.0.0/0"]
-  # Add 80 rules
-  ingress_rules = ["http-80-tcp"]
-  # Allow all rules for all protocols
-  egress_rules = ["all-all"]
-
-  tags = {
-    project     = "bobbins",
-    environment = "dev"
-  }
-}
-
-resource "random_string" "lb_id" {
-  length  = 3
-  special = false
-}
-
-###################
-
-module "alb" {
-  source  = "terraform-aws-modules/alb/aws"
-  version = "~> 5.0"
-
-  name = "bobbins-alb"
-
-  load_balancer_type = "application"
-
-  vpc_id      = module.vpc.vpc_id
-  security_groups = [module.lb_security_group.this_security_group_id]
-  subnets         = module.vpc.public_subnets
-
-  target_groups = [
-    {
-      count = var.instance_count
-      name_prefix      = "pref-"
-      backend_protocol = "HTTP"
-      backend_port     = 80
-      target_type      = "instance"
-      targets = [
-        {
-          #target_id           = module.ec2_instances[0].id
-          target_id           = module.ec2_instances.instance_ids[0]
-          port = 80
-        }
-#        {
-#          target_id           = module.ec2_instances[1].id
-#          port = 80
-#        }
-      ]
-    }
-  ]
-
-  http_tcp_listeners = [
-    {
-      port               = 80
-      protocol           = "HTTP"
-      target_group_index = 0
-    }
-  ]
-
-  tags = {
-    project     = "bobbins",
-    environment = "dev"
-  }
-}
-
-#resource "aws_lb_target_group_attachment" "node" {
-#
-#  count = var.instance_count
-#  target_group_arn = module.alb.target_group.arn
-#  target_id           = module.ec2_instances[count.index].id
-#  port             = 80
-#  tags = {
-#    project     = "bobbins",
-#    environment = "dev"
-#  }
-#
-#}
-
-
-####################
-
-
-#module "elb_http" {
-#  source  = "terraform-aws-modules/elb/aws"
-#  version = "2.4.0"
-#
-#  # Ensure load balancer name is unique
-#  name = "lb-${random_string.lb_id.result}-bobbins-dev"
-#
-#  internal = false
-#
-#  security_groups = [module.lb_security_group.this_security_group_id]
-#  subnets         = module.vpc.public_subnets
-#
-#  number_of_instances = length(module.ec2_instances.instance_ids)
-#  instances           = module.ec2_instances.instance_ids
-#
-#  listener = [{
-#    instance_port     = "80"
-#    instance_protocol = "HTTP"
-#    lb_port           = "80"
-#    lb_protocol       = "HTTP"
-#  }]
-#
-#  health_check = {
-#    target              = "HTTP:80/index.html"
-#    interval            = 10
-#    healthy_threshold   = 3
-#    unhealthy_threshold = 10
-#    timeout             = 5
-#  }
-#
-#  tags = {
-#    project     = "bobbins",
-#    environment = "dev"
-#  }
-#}
-
-module "ec2_instances" {
-  source = "./modules/aws-instance"
-
-  instance_count = var.instance_count
+resource "aws_launch_configuration" "example" {
   instance_type  = "t2.micro"
-  # Need NAT gateway enabling if private
-  subnet_ids = module.vpc.private_subnets[*]
-  #subnet_ids         = module.vpc.public_subnets[*]
-  security_group_ids = [module.app_security_group.this_security_group_id]
+  image_id           = data.aws_ami.amazon_linux.id
+  key_name      = aws_key_pair.webserver-key.key_name
+  security_groups = [aws_security_group.instance.id]
 
-  tags = {
-    project     = "bobbins",
-    environment = "dev"
+  user_data              = file("userdata.sh")
+
+  # Required when using a launch configuration with an auto scaling group.
+  # https://www.terraform.io/docs/providers/aws/r/launch_configuration.html
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
-#resource "aws_instance" "node" {
-# 
-#  count = var.instance_count
-#  
-#  ami                    = data.aws_ami.ubuntu.id
-#  subnet_id              = var.subnet_id
-#  key_name               = var.key_pair
-#  instance_type          = var.instance_type
-#  vpc_security_group_ids = [var.security_group_id]
-#  
-#  tags          = {
-#    Name        = "${var.app_name}"
-#    #Environment = "production"
-#  }
-#  
-#  root_block_device {
-#        volume_type     = "gp2"
-#        volume_size     = 8
-#        delete_on_termination   = true
-#  }
-#
-#  user_data = file("install_apache.sh")
-#}
-#
-#resource "aws_lb_target_group_attachment" "node" {
-#
-#  count = var.instance_count
-#
-#  target_group_arn = var.target_group_arn
-##  target_id        = aws_instance.node[count.index].id
-#  target_id           = module.ec2_instances[count.index].id
-#  port             = 80
-#}
+resource "aws_autoscaling_group" "example" {
+  launch_configuration = aws_launch_configuration.example.name
+  # If using a private subnet, remember to enable NAT gateway
+  vpc_zone_identifier  = module.vpc.private_subnets
 
-# some outputs skipped 
+  target_group_arns = [aws_lb_target_group.asg.arn]
+  health_check_type = "ELB"
+
+  min_size = var.min_instance_count
+  max_size = var.max_instance_count 
+  desired_capacity = var.desired_instance_count
+
+  tag {
+    key                 = "Name"
+    value               = "terraform-asg-example"
+    propagate_at_launch = true
+  }
+}
+
+resource "aws_lb" "example" {
+
+  name               = var.alb_name
+  load_balancer_type = "application"
+  subnets         = module.vpc.public_subnets
+  security_groups    = [aws_security_group.alb.id]
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.example.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  # By default, return a simple 404 page
+  default_action {
+    type = "fixed-response"
+
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "404: page not found"
+      status_code  = 404
+    }
+  }
+}
+
+resource "aws_lb_target_group" "asg" {
+
+  name = var.alb_name
+
+  port     = var.server_port
+  protocol = "HTTP"
+  vpc_id   = module.vpc.vpc_id
+
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200"
+    interval            = 15
+    timeout             = 3
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+}
+
+resource "aws_lb_listener_rule" "asg" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 100
+
+  condition {
+    path_pattern {
+      values = ["*"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.asg.arn
+  }
+}
+
